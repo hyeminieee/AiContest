@@ -1,0 +1,27 @@
+반구: right
+[뉴런 수]
+  PN: 344
+  KC: 2597
+  APL: 1
+  MBON: 48
+  DAN: 165
+[연결]
+  PN→KC 연결 줄 수: 13485
+  PN 입력을 받는 KC: 2452 / 2597
+  KC 1개당 PN 입력 뉴런 수(중앙값): 5
+  KC→APL 연결을 가진 KC: 2597
+  APL→KC 연결을 받는 KC: 2597
+  KC→MBON 연결 줄 수: 23574
+  DAN→KC 연결 줄 수: 13705
+  APL의 신경전달물질(top_nt): gaba
+[PN 종류 상위 10개 (자극 A·B 후보)]
+  DA1_lPN: 7
+  M_vPNml53: 6
+  DA2_lPN: 6
+  M_lPNm11D: 6
+  VM5d_adPN: 5
+  DL3_lPN: 5
+  VA1v_adPN: 5
+  DL2d_adPN: 5
+  M_vPNml84: 4
+  VP1l+_lvPN: 4

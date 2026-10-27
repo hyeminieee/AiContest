@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REFLEX PoC</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <span class="file">reflex_poc.py</span>
+    <span class="sub">초파리 버섯체 회로 · 학습과 재학습 실험 · 팀 REFLEX</span>
+    <span class="mode" id="mode">회로: -</span>
+  </div>
+
+  <ol class="steps" id="steps"></ol>
+
+  <div class="dialog">
+    <div class="dialog-title" id="dlgTitle"></div>
+    <div class="dialog-text" id="dlgText"></div>
+    <div class="dialog-actions">
+      <button id="prev">◀ 이전</button>
+      <span id="actions"></span>
+      <button id="next" class="primary">다음 ▶</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <section class="panel scene">
+      <div class="label">PET · T자 미로</div>
+      <svg id="maze" viewBox="0 0 360 230" role="img" aria-label="T자 미로의 초파리 펫"></svg>
+      <div class="note">펫의 이동은 설명용 애니메이션입니다. 선택은 모델이 계산한 확률로 정해집니다.</div>
+    </section>
+
+    <section class="panel stim">
+      <div class="label">STIMULUS · PN 입력 50개</div>
+      <div class="pnrow"><span class="tag a">A</span><div class="dots" id="pnA"></div></div>
+      <div class="pnrow"><span class="tag b">B</span><div class="dots" id="pnB"></div></div>
+      <div class="big" id="pAbox">A를 고를 확률 <b id="pA">-</b></div>
+      <div class="rule">현재 정답 자극: <b id="good">-</b> · 시도 <b id="trial">0</b>회</div>
+    </section>
+
+    <section class="panel card">
+      <div class="label">CIRCUIT · 버섯체</div>
+      <div class="cardhead" id="condLabel">-</div>
+      <ul class="circuit" id="circuit"></ul>
+      <ul class="checklist" id="checklist"></ul>
+    </section>
+  </div>
+
+  <section class="panel bottom" id="bottom"></section>
+
+  <div class="footer">
+    장난감 연결로 만든 PoC입니다. 결과 해석은 FlyWire v783 회로로 교체한 뒤의 본 실험에서 합니다 ·
+    펫의 말은 대화형 AI(또는 규칙)가 신경망 상태를 옮긴 표현이며, 펫이 고통이나 의식을 느끼지는 않습니다.
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
