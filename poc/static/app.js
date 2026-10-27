@@ -79,6 +79,7 @@ async function animateTrial(rec, fast) {
   const o = $("outcome");
   o.textContent = rec.outcome > 0 ? `${rec.choice} 선택 → 좋은 결과` : `${rec.choice} 선택 → 좋지 않은 결과`;
   o.setAttribute("fill", rec.outcome > 0 ? "var(--a)" : "var(--bad)");
+  if (S.instant) return;
   await sleep(fast ? 70 : 380);
   flyTo("center");
   await sleep(fast ? 50 : 200);
@@ -319,5 +320,21 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") go(S.step - 1);
 });
 
+// 데모 모드: 주소 뒤에 ?step=5 처럼 붙이면 애니메이션 없이 5단계까지 실행해 둔다 (발표·캡처용)
+async function jumpTo(target) {
+  S.instant = true;
+  for (let i = 0; i <= target; i++) {
+    await go(i);
+    const act = STEPS[i].actions;
+    if (act) { await act[0].fn(); S.done.add(i); }
+  }
+  if (target === 6) for (const p of [PRESETS[0], PRESETS[1], PRESETS[4], PRESETS[5]]) await sendCmd(p);
+  S.instant = false;
+  renderSteps(); renderBottom();
+  document.body.dataset.ready = "1";
+}
+
 drawMaze();
-go(0);
+const stepParam = Number(new URLSearchParams(location.search).get("step"));
+if (stepParam >= 1 && stepParam <= STEPS.length) jumpTo(stepParam - 1);
+else go(0);
