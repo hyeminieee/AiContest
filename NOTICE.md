@@ -16,7 +16,8 @@
 | 코드 | 출처 | 라이선스 | 사용 방식 |
 |---|---|---|---|
 | Drosophila_brain_model (Shiu et al.) | https://github.com/philshiu/Drosophila_brain_model | MIT | 데이터 파일 사용, 코드 참고 |
-| fly-brain (Eon Systems) | https://github.com/eonsystemspbc/fly-brain | GPL-2.0-or-later | 참고만, 코드 복사하지 않음 |
+| fly-brain (Li Xiang) | https://github.com/lixiang1076/fly-brain | MIT | 계획서 작성 시 참고한 저장소. 실제로 쓴 파일과 버전은 확인 후 기입 |
+| fly-brain (Eon Systems, 이름만 같은 다른 저장소) | https://github.com/eonsystemspbc/fly-brain | GPL-2.0-or-later | 참고만, 코드 복사하지 않음 |
 
 ## 그림·폰트·음원
 

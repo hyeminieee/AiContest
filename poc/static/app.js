@@ -1,8 +1,11 @@
-// REFLEX PoC 화면: 모든 숫자는 서버(engine.py)가 계산한 값을 그대로 그린다.
+// REFLEX PoC 화면: 모든 숫자는 엔진이 계산한 값을 그대로 그린다.
+// 서버로 열면 engine.py가, REFLEX_PoC.html 파일로 열면 같은 계산을 옮긴 local_engine.js가 계산한다.
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const api = (path, body = {}) =>
-  fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+  window.ReflexLocal
+    ? Promise.resolve(JSON.parse(JSON.stringify(window.ReflexLocal.handle(path, body))))
+    : fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
 
 const S = { step: 0, done: new Set(), busy: false, reset: null, state: null, hist: [], revAt: null,
             baseKC: null, baseHist: null, weakKC: null, weakHist: null, batch: null };
@@ -85,6 +88,12 @@ async function animateTrial(rec, fast) {
   await sleep(fast ? 50 : 200);
 }
 
+// 정식 절차에서 그 단계에 남은 시도 수 (단계 횟수를 넘겨 실행하지 않는다)
+function remaining(phase) {
+  const p = S.reset.params, n = phase === "initial" ? p.initial_trials : p.reversal_trials;
+  return Math.max(0, n - S.hist.filter((h) => h.phase === phase).length);
+}
+
 async function runTrials(n, fast = true) {
   for (let i = 0; i < n; i++) {
     const r = await api("/api/step", { n: 1 });
@@ -97,9 +106,15 @@ async function runTrials(n, fast = true) {
 }
 
 // ---------- 그래프 ----------
-function criterion(hist, start, w = 10, need = 9) {
-  const seq = hist.slice(start).map((h) => h.correct);
-  for (let i = 0; i + w <= seq.length; i++) if (seq.slice(i, i + w).filter(Boolean).length >= need) return i + w;
+// 주 기준(엔진과 같음): 한 단계 구간 안에서 정답 선택 확률이 crit_p 이상인 시도가 crit_k번 연속
+function criterion(hist, phase) {
+  const p = S.reset.params, n = phase === "initial" ? p.initial_trials : p.reversal_trials;
+  const seq = hist.filter((h) => h.phase === phase).slice(0, n);
+  let run = 0;
+  for (let i = 0; i < seq.length; i++) {
+    run = seq[i].p_correct >= p.crit_p ? run + 1 : 0;
+    if (run >= p.crit_k) return i + 1;
+  }
   return null;
 }
 
@@ -133,8 +148,8 @@ function stripSVG(batch) {
   const Y = (v) => T + (1 - v / (cap + 2)) * (H - T - B);
   const colW = (W - L - 10) / 6;
   let g = "";
-  for (const v of [0, 10, 20, 30, 40]) g += `<line x1="${L}" x2="${W - 10}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="10" fill="var(--quiet)">${v}</text>`;
-  g += `<text x="${L - 6}" y="${Y(cap) + 4}" text-anchor="end" font-size="10" fill="var(--bad)">실패</text>`;
+  for (const v of [0, 10, 20, 30]) g += `<line x1="${L}" x2="${W - 10}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="10" fill="var(--quiet)">${v}</text>`;
+  g += `<text x="${L - 6}" y="${Y(cap) + 4}" text-anchor="end" font-size="10" fill="var(--bad)">미도달</text>`;
   phases.forEach((ph, pi) => conds.forEach((c, ci) => {
     const k = pi * 3 + ci, cx = L + colW * (k + 0.5);
     const vals = batch.conditions[c][ph];
@@ -142,9 +157,8 @@ function stripSVG(batch) {
       const jx = cx + ((i * 37) % 21 - 10) * 1.3;
       g += `<circle cx="${jx}" cy="${Y(v == null ? cap : v)}" r="2.6" fill="${COLOR[c]}" fill-opacity=".75"/>`;
     });
-    const ok = vals.filter((v) => v != null).sort((a, b) => a - b);
-    if (ok.length) {
-      const med = ok[Math.floor((ok.length - 1) / 2)];
+    const med = batch.conditions[c][`median_reached_${ph}`];  // 엔진이 계산한 중앙값(짝수 개면 가운데 두 값의 평균)
+    if (med != null) {
       g += `<line x1="${cx - 18}" x2="${cx + 18}" y1="${Y(med)}" y2="${Y(med)}" stroke="var(--ink)" stroke-width="2"/>`;
     }
     g += `<text x="${cx}" y="${H - 22}" text-anchor="middle" font-size="10" fill="${COLOR[c]}">${COND_LABEL[c]}</text>`;
@@ -157,7 +171,7 @@ function stripSVG(batch) {
 
 function meanCurveSVG(batch) {
   const series = Object.entries(batch.conditions).map(([c, s]) => ({
-    color: COLOR[c], label: s.label, hist: s.curve.map((v) => ({ pA: v })) }));
+    color: COLOR[c], label: s.label, hist: s.curve_p_correct.map((v) => ({ pA: v })) }));
   return curveSVG(series, batch.params.initial_trials);
 }
 
@@ -165,25 +179,28 @@ function meanCurveSVG(batch) {
 const STEPS = [
   {
     title: "1. 회로 불러오기",
-    text: "초파리 버섯체의 학습 회로를 불러옵니다. 냄새 정보를 전하는 PN 50개가 KC 2,000개로 들어가고, APL 뉴런이 KC 전체를 눌러 소수만 반응하게 하며, KC→MBON 연결이 학습으로 바뀝니다. 오른쪽 카드의 숫자는 모두 엔진이 계산한 값입니다.",
+    text: "초파리 버섯체의 학습 회로를 불러옵니다. FlyWire v783 오른쪽 반구에서 추출한 실제 연결로, 한 사구체를 담당하는 흥분성 PN 124개가 KC 2,597개로 들어가고, APL 뉴런이 KC 전체를 눌러 소수만 반응하게 하며, KC→MBON 연결이 학습으로 바뀝니다. 오른쪽 카드의 숫자는 모두 엔진이 계산한 값입니다.",
     enter: async () => { await resetSession("baseline"); },
   },
   {
     title: "2. 자극 A·B 제시",
-    text: "두 자극은 PN 입력 일부를 공유하는 비슷한 냄새입니다. 아래 그림은 KC 240개의 반응입니다. 초록은 A에만, 주황은 B에만, 보라는 둘 다에 반응한 KC입니다. APL 억제 덕분에 KC의 약 9%만 반응합니다.",
+    text: "A는 DM2, B는 DM4 사구체의 PN 입력입니다(우선 검증 후보). 두 입력은 연결된 KC 일부를 공유합니다. 아래 그림은 A·B와 연결된 KC 중 240개의 반응입니다. 초록은 A에만, 주황은 B에만, 보라는 둘 다에 반응한 KC입니다. APL 억제 때문에 연결된 KC 중 일부만 반응합니다.",
   },
   {
     title: "3. 처음 학습",
     text: "A를 고르면 좋은 결과, B를 고르면 좋지 않은 결과를 줍니다. 펫이 40번 고르는 동안 A를 고를 확률이 어떻게 오르는지 보세요. 아래 점은 매 시도의 실제 선택입니다(초록=정답, 빨강=오답).",
-    actions: [{ label: "40회 실행", cls: "run", fn: async () => { await runTrials(40); } },
-              { label: "1회씩", fn: async () => { await runTrials(1, false); } }],
+    actions: [{ label: "이 단계 남은 횟수 실행", cls: "run", fn: async () => { await runTrials(remaining("initial")); } },
+              { label: "1회씩", fn: async () => { await runTrials(Math.min(1, remaining("initial")), false); } }],
   },
   {
     title: "4. 조건 변경 (역전학습)",
     text: "이제 규칙을 바꿔 B가 정답입니다. 이미 배운 A 기억을 누르고 B를 새로 배워야 합니다. 보라 점선 이후 확률이 다시 내려가는 데 걸리는 시도 수가 이번 연구의 핵심 지표입니다.",
-    actions: [{ label: "규칙 바꾸고 40회 실행", cls: "run", fn: async () => {
-      if (S.revAt == null) { await api("/api/reverse"); S.revAt = S.hist.length; }
-      await runTrials(40);
+    actions: [{ label: "규칙 바꾸고 남은 횟수 실행", cls: "run", fn: async () => {
+      if (S.revAt == null) {
+        await runTrials(remaining("initial"));  // 정식 절차: 첫 단계를 정해진 횟수까지 마친 뒤에만 규칙을 바꾼다
+        await api("/api/reverse"); S.revAt = S.hist.length;
+      }
+      await runTrials(remaining("reversal"));
       S.baseHist = [...S.hist]; S.baseKC = S.reset.kc; S.baseRev = S.revAt;
     } }],
   },
@@ -199,12 +216,12 @@ const STEPS = [
   },
   {
     title: "6. 30회 반복 비교",
-    text: "한 번의 실행은 우연일 수 있으므로, 같은 절차를 seed 30개 × 3조건으로 반복합니다. 조건끼리 같은 seed를 써서 짝지어 비교합니다. 결과 원자료는 poc/results/batch_summary.csv로 저장됩니다.",
+    text: "한 번의 실행은 우연일 수 있으므로, 같은 절차를 seed 30개 × 3조건으로 반복합니다. 조건끼리 같은 seed를 써서 짝지어 비교합니다. 실제 회로에서는 seed가 선택 난수만 바꾸므로 실제 초파리 여러 마리가 아닙니다. 서버로 열면 시도별 원자료가 poc/results/에 저장되고, HTML 파일로 열면 화면에만 표시됩니다.",
     actions: [{ label: "30회 × 3조건 실행", cls: "run", fn: async () => { S.batch = await api("/api/batch", { n: 30 }); } }],
   },
   {
     title: "7. 대화형 명령 · 보안 검사",
-    text: "말로 펫에게 명령합니다. 문장은 해석기(LLM 또는 규칙)를 거쳐 정해진 명령으로 바뀌고, 허용목록 검사를 통과해야만 실행됩니다. 아래 공격 문장 버튼으로 규칙을 바꾸라는 요청이 차단되는 것을 확인하세요.",
+    text: "말로 펫에게 명령합니다. 문장은 해석기(LLM 또는 규칙)를 거쳐 정해진 명령으로 바뀌고, 허용목록 검사를 통과해야만 실행됩니다. 아래 공격 문장 버튼으로 규칙을 바꾸라는 요청이 차단되는 것을 확인하세요. 여기서 하는 시도와 규칙 변경은 정해진 실험 절차 밖의 자유 시연입니다.",
     enter: async () => { if (!S.reset || S.reset.state.condition !== "baseline") await resetSession("baseline"); },
   },
 ];
@@ -217,37 +234,37 @@ function renderBottom() {
   if (st === 0) {
     el.innerHTML = `<h4>회로 정보</h4><div class="stat">PN <b>${S.reset.n_pn}</b></div><div class="stat">KC <b>${S.reset.n_kc.toLocaleString()}</b></div>
       <div class="stat">APL <b>1</b></div><div class="stat">MBON 묶음 <b>2</b> (접근/회피)</div>
-      <p class="note">연결 출처: ${S.reset.source}. FlyWire v783에서 추출한 PN→KC 시냅스 수 행렬로 바꾸면 같은 화면에서 실제 회로 결과가 나옵니다.</p>`;
+      <p class="note">연결 출처: ${S.reset.source}. 입력 A = ${S.reset.inputs ? S.reset.inputs.A : "-"}, B = ${S.reset.inputs ? S.reset.inputs.B : "-"}(우선 검증 후보). MBON 접근/회피는 실제 연결이 아니라 팀이 만든 두 출력입니다.</p>`;
   } else if (st === 1) {
     const kc = S.reset.kc;
     el.innerHTML = `<h4>KC 반응 (240개 표본)</h4><div class="raster">${rasterHTML(kc)}</div>
       <div class="legend"><b class="a">■</b> A에만 <b class="b">■</b> B에만 <b class="ab">■</b> 둘 다 · 전체 KC 반응 비율 A ${(S.state.kc_active_A * 100).toFixed(1)}%, B ${(S.state.kc_active_B * 100).toFixed(1)}%, 겹침 ${S.state.overlap_AB}</div>`;
   } else if (st === 2 || st === 3) {
-    const c0 = criterion(S.hist, 0), c1 = S.revAt != null ? criterion(S.hist, S.revAt) : null;
+    const c0 = criterion(S.hist, "initial"), c1 = S.revAt != null ? criterion(S.hist, "reversal") : null;
     el.innerHTML = `<h4>학습 곡선 · 세로축: A를 고를 확률, 가로축: 시도</h4>${curveSVG([{ hist: S.hist, color: "var(--accent)", label: "기본", dots: true }], S.revAt)}
-      <div class="stat">처음 학습 기준 도달 <b>${c0 ?? "-"}</b>회</div>${S.revAt != null ? `<div class="stat">재학습 기준 도달 <b>${c1 ?? "미도달"}</b>회</div>` : ""}
-      <p class="note">기준: 최근 10회 중 9회 이상 정답이 처음 나온 시점.</p>`;
+      <div class="stat">처음 학습 기준 도달 <b>${c0 != null ? c0 + "회" : "-"}</b></div>${S.revAt != null ? `<div class="stat">재학습 기준 도달 <b>${c1 != null ? c1 + "회" : "아직 미도달"}</b></div>` : ""}
+      <p class="note">기준(팀 확정 전 임시값): 그 단계 안에서 정답을 고를 확률이 ${S.reset.params.crit_p} 이상인 시도가 ${S.reset.params.crit_k}번 연속된 시점.</p>`;
   } else if (st === 4) {
     const series = [];
     if (S.baseHist) series.push({ hist: S.baseHist, color: "var(--accent)", label: "기본" });
     series.push({ hist: S.weakHist || S.hist, color: "var(--b)", label: "APL 억제 약화" });
-    const r = (h, a) => (h ? criterion(h, a) ?? "미도달" : "-");
+    const r = (h, ph) => (h ? criterion(h, ph) ?? "미도달" : "-");
     el.innerHTML = `<div class="row2"><div><h4>학습 곡선 비교 (seed ${SEED}) · A를 고를 확률</h4>${curveSVG(series, 40)}
         <table class="res"><tr><th></th><th>처음 학습</th><th>재학습</th></tr>
-        <tr><td>기본</td><td>${r(S.baseHist, 0)}</td><td>${r(S.baseHist, 40)}</td></tr>
-        <tr><td>APL 억제 약화</td><td>${r(S.weakHist, 0)}</td><td>${r(S.weakHist, 40)}</td></tr></table></div>
+        <tr><td>기본</td><td>${r(S.baseHist, "initial")}</td><td>${r(S.baseHist, "reversal")}</td></tr>
+        <tr><td>APL 억제 약화</td><td>${r(S.weakHist, "initial")}</td><td>${r(S.weakHist, "reversal")}</td></tr></table></div>
       <div><h4>KC 반응 비교</h4><div class="legend">기본</div><div class="raster">${S.baseKC ? rasterHTML(S.baseKC) : ""}</div>
         <div class="legend">APL 억제 약화</div><div class="raster">${S.weakKC ? rasterHTML(S.weakKC) : ""}</div>
         <div class="legend"><b class="a">■</b> A <b class="b">■</b> B <b class="ab">■</b> 둘 다 — 억제가 약해지면 보라(겹침)가 늘어납니다.</div></div></div>`;
   } else if (st === 5) {
     if (!S.batch) { el.innerHTML = `<h4>반복 실험</h4><p class="note">위의 [30회 × 3조건 실행]을 누르세요.</p>`; return; }
-    const b = S.batch, med = (xs) => { const ok = xs.filter((v) => v != null).sort((x, y) => x - y); return ok.length ? ok[Math.floor((ok.length - 1) / 2)] : "-"; };
+    const b = S.batch, med = (v) => (v == null ? "-" : v);
     const rows = Object.entries(b.conditions).map(([c, s]) => `<tr><td style="color:${COLOR[c]}">${s.label}</td><td>${(s.kc_active * 100).toFixed(1)}%</td><td>${s.overlap}</td>
-      <td>${med(s.initial)} (실패 ${s.fail_initial})</td><td>${med(s.reversal)} (실패 ${s.fail_reversal})</td></tr>`).join("");
+      <td>${med(s.median_reached_initial)} (${s.reached_initial}/${s.n_runs} 도달)</td><td>${med(s.median_reached_reversal)} (${s.reached_reversal}/${s.n_runs} 도달)</td></tr>`).join("");
     el.innerHTML = `<div class="row2"><div><h4>seed별 기준 도달 시도 수 (가로선 = 중앙값)</h4>${stripSVG(b)}</div>
-      <div><h4>시도별 정답 비율 (30회 평균)</h4>${meanCurveSVG(b)}
+      <div><h4>시도별 정답 선택 확률 (30회 평균)</h4>${meanCurveSVG(b)}
       <table class="res"><tr><th>조건</th><th>KC 반응</th><th>겹침</th><th>처음 학습</th><th>재학습</th></tr>${rows}</table>
-      <p class="note">APL 약화 vs 기본 (대응 부호 뒤집기 순열검정): 처음 학습 p${fmtP(b.p_apl_vs_baseline.initial)}, 재학습 p${fmtP(b.p_apl_vs_baseline.reversal)} · 장난감 회로 결과이므로 연구 결론으로 쓰지 않습니다.</p></div></div>`;
+      <p class="note">APL 약화 vs 기본 (대응 부호 뒤집기 순열검정): 처음 학습 p${fmtP(b.p_apl_vs_baseline.initial)}, 재학습 p${fmtP(b.p_apl_vs_baseline.reversal)} · p는 미도달을 벌점 점수로 둔 참고값입니다. 예비 실행 결과이므로 연구 결론으로 쓰지 않습니다.</p></div></div>`;
   } else if (st === 6) {
     if (!$("cmd")) {
       el.innerHTML = `<h4>명령 콘솔</h4><div class="console"><input id="cmd" placeholder="예: A 냄새 보여줘 / 5번 골라봐 / 지금 상태 어때?" maxlength="300"><button id="send" class="primary">보내기</button></div>

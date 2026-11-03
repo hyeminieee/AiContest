@@ -100,7 +100,7 @@
 
 | # | 발견 내용 | 조치 |
 |---|---|---|
-| 1 | **"fly-brain 코드 MIT 라이선스"라는 표현이 부정확할 수 있습니다.** GitHub `eonsystemspbc/fly-brain`은 README 기준 **GPL-2.0-or-later**이고, 그 안에 포함된 Shiu et al.의 Brian2 자료만 MIT입니다. 원본 `philshiu/Drosophila_brain_model`이 MIT입니다. | 참고하는 저장소가 어느 것인지 정하고 각 저장소의 LICENSE 파일을 직접 열어 확인합니다. **GPL 코드는 복사하지 말고**(복사하면 우리 저장소 전체가 GPL이 됨), MIT 코드만 저작권 표시를 유지한 채 사용합니다. 보고서와 보드섹션의 라이선스 표기를 수정합니다. |
+| 1 | **fly-brain은 이름이 같은 저장소가 둘입니다.** 계획서 작성 때 참고한 `lixiang1076/fly-brain`은 **MIT**이므로 계획서의 MIT 표기는 정정할 필요가 없습니다. `eonsystemspbc/fly-brain`은 **GPL-2.0-or-later**(포함된 Shiu et al. Brian2 자료는 MIT)입니다. 원본 `philshiu/Drosophila_brain_model`은 MIT입니다. | 결과 리포트에 실제 사용한 저장소·버전·파일을 명시합니다. 루트 LICENSE만으로 포함 파일과 의존 코드의 조건까지 확인된 것은 아니므로, 쓰는 파일은 따로 확인합니다. **GPL 코드는 복사하지 말고**, MIT 코드는 저작권 표시를 유지한 채 사용합니다. |
 | 2 | **FlyWire 라이선스 표기가 출처마다 다릅니다.** Zenodo의 v783 연결 데이터(10.5281/zenodo.10676866)는 CC BY 4.0으로 표기되어 있고, FlyWire Principles에는 공개 데이터가 CC BY-NC 4.0이라고 적혀 있습니다. | 두 표기를 모두 기록하고, 더 엄격한 **CC BY-NC 4.0(비상업)** 기준을 따릅니다. 공모전은 비상업적 교육 목적이라 문제는 없습니다. |
 | 3 | **"Codex"라는 이름이 두 가지로 쓰입니다.** 계획서의 개발 보조 도구 Codex(OpenAI)와 FlyWire 데이터 포털 Codex(codex.flywire.ai)는 다른 것입니다. | 보고서와 보드섹션에 "OpenAI Codex(코딩 보조)"와 "FlyWire Codex(데이터 포털)"를 구분해서 적습니다. 실제로 Claude Code 등 다른 도구를 쓴 경우 그 도구도 전부 기재합니다(보드섹션 ①). |
 | 4 | eonsystems/fly-brain은 Linux(WSL2) + NVIDIA GPU + CUDA 12가 필요합니다. 13.9만 뉴런 전체 뇌 LIF 시뮬레이션은 PoC에 비해 너무 무겁습니다. | 계획서 7항대로 **버섯체 회로만 추출**합니다(PN·KC·APL·MBON·DAN). 전뇌 LIF 모델은 "추가 과제"로 미룹니다. |
@@ -470,7 +470,7 @@ pip install numpy pandas pyarrow matplotlib scipy pyyaml streamlit anthropic
 **④ 인간이 판단·수정·개입한 지점 (배점 가장 높음)**
 | 개입 시점 | 무엇을 판단했는가 | 왜 그렇게 판단했는가 |
 |---|---|---|
-| 1주차 라이선스 검토 | fly-brain(eonsystems) 코드를 복사하지 않고 Shiu et al. MIT 코드만 참고 | 저장소 README에 GPL-2.0-or-later로 명시. 계획서의 MIT 표기를 정정 |
+| 1주차 라이선스 검토 | AI가 Eon 저장소의 GPL을 근거로 계획서 MIT 표기 정정을 제안 → 교차 검토로 저장소 혼동을 발견, 계획서 표기 유지 | `lixiang1076/fly-brain` LICENSE는 MIT, `eonsystemspbc/fly-brain`은 GPL-2.0-or-later. 원문 대조로 확인 |
 | 회로 추출 | AI 코드의 KC 선택 조건을 수정 | 실제 `cell_class` 값 목록과 문헌 KC 수(약 2,000)를 대조 |
 | 실험 기준 | 학습 완료 기준을 10회 중 8회에서 9회로 강화 | 학습을 끈 대조군도 우연히 기준을 통과함(예비 실행 결과) |
 | 명령 처리 | LLM 출력도 허용목록으로 재검사 | 프롬프트 인젝션 사례 N건에서 LLM 단독으로는 막지 못함 |
@@ -586,6 +586,7 @@ pip install numpy pandas pyarrow matplotlib scipy pyyaml streamlit anthropic
 | 코드 | 출처 | 라이선스 | 비고 |
 |---|---|---|---|
 | Drosophila_brain_model (Shiu et al.) | https://github.com/philshiu/Drosophila_brain_model | **MIT** | Brian2 LIF 전뇌 모델. v783 파일 사용 시 config 경로 변경 필요 |
+| fly-brain (Li Xiang) | https://github.com/lixiang1076/fly-brain | **MIT** | 계획서 작성 시 참고한 저장소. 실제 사용 파일·버전은 확인 후 기록 |
 | fly-brain (Eon Systems) | https://github.com/eonsystemspbc/fly-brain | **GPL-2.0-or-later** (포함된 Shiu Brian2 자료는 MIT) | Linux/WSL2 + NVIDIA GPU 필요. 복사하지 말고 참고만 |
 | Brian2 시뮬레이터 | https://brian2.readthedocs.io | (설치 시 확인) | 추가 과제에서 사용 |
 | Streamlit | https://docs.streamlit.io | (설치 시 확인) | 펫 화면 |

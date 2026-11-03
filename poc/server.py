@@ -23,8 +23,10 @@ batch_cache = {}
 
 
 def kc_sample(sess, n=240):
-    """화면에 그릴 KC 일부(앞쪽 n개)의 활성 여부. 실제 계산값 그대로다."""
-    return {s: (sess.kc[s][:n] > 0).astype(int).tolist() for s in ("A", "B")}
+    """화면에 그릴 KC 일부의 활성 여부. 실제 계산값 그대로다.
+    실제 회로에서는 A·B 입력과 연결된 KC 중 앞쪽 n개를 고른다(연결 없는 KC는 늘 꺼져 있음)."""
+    idx = sess.circuit["show"][:n]
+    return {s: (sess.kc[s][idx] > 0).astype(int).tolist() for s in ("A", "B")}
 
 
 def save_batch(out):
@@ -45,7 +47,8 @@ def handle(path, body):
             return {"error": "unknown condition"}
         sessions[sid] = engine.Session(cond, int(body.get("seed", 0)))
         s = sessions[sid]
-        return {"state": s.state(), "kc": kc_sample(s), "n_pn": engine.N_PN, "n_kc": engine.N_KC,
+        return {"state": s.state(), "kc": kc_sample(s), "n_pn": s.circuit["W_pn_kc"].shape[1],
+                "n_kc": s.circuit["W_pn_kc"].shape[0], "inputs": s.circuit["inputs"],
                 "pn": {k: v.astype(int).tolist() for k, v in s.circuit["pn"].items()},
                 "source": s.circuit["source"], "params": s.p}
     s = sessions.get(sid)
@@ -91,8 +94,11 @@ def handle(path, body):
     if path == "/api/batch":
         n = max(5, min(50, int(body.get("n", 30))))
         if n not in batch_cache:
-            batch_cache[n] = engine.run_batch(n)
-            save_batch(batch_cache[n])
+            out = engine.run_batch(n)
+            engine.save_results(out, f"batch_n{n}")
+            out.pop("_runs")  # 시도별 원자료는 파일로만 저장하고 화면에는 요약만 보낸다
+            batch_cache[n] = out
+            save_batch(out)
         return batch_cache[n]
     return {"error": "unknown path"}
 
