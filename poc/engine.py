@@ -31,7 +31,10 @@ DEFAULTS = {"theta": 1.0, "gain": 30.0, "decay": 0.05, "beta": 8.0,
             # 주 기준(팀 확정 전 임시값): 정답 선택 확률이 crit_p 이상인 시도가 crit_k번 연속
             "crit_p": 0.8, "crit_k": 5,
             # 보조 기준: 실제 선택 window번 중 need번 이상 정답
-            "window": 10, "need": 9}
+            "window": 10, "need": 9,
+            # 보상 정책(팀 확정 전): reward_punish = 정답 보상(+1)·오답 처벌(-1) / reward_only = 정답 보상(+1)·오답 결과 없음(0)
+            "reward_policy": "reward_punish"}
+REWARD_POLICIES = ("reward_punish", "reward_only")
 
 
 def make_toy_circuit(seed):
@@ -121,6 +124,8 @@ class Session:
         self.seed = seed
         self.circuit_kind = circuit
         self.p = {**DEFAULTS, **CONDITIONS[condition], **overrides}
+        if self.p["reward_policy"] not in REWARD_POLICIES:
+            raise ValueError(f"보상 정책은 {REWARD_POLICIES} 중 하나")
         self.circuit = make_real_circuit() if circuit == "real" else make_toy_circuit(seed)
         self.rng = np.random.default_rng(10_000 + seed)  # 선택 난수. 실제 회로에서는 seed가 바꾸는 유일한 값
         self.kc, self.apl, self.apl_resid = {}, {}, {}
@@ -176,7 +181,8 @@ class Session:
         pA = self.p_choose_A()
         vA, vB = self.value("A"), self.value("B")
         choice = "A" if self.rng.random() < pA else "B"
-        outcome = outcome_override if outcome_override is not None else (1 if choice == self.good else -1)
+        wrong = -1 if self.p["reward_policy"] == "reward_punish" else 0
+        outcome = outcome_override if outcome_override is not None else (1 if choice == self.good else wrong)
         self.learn(choice, outcome)
         wA, wB = self.weight_summary("A"), self.weight_summary("B")
         rec = {"trial": self.trial, "phase": phase_name(self.reversals),

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REFLEX 펫</title>
+<!--CSS-->
+<!--IMPORTMAP-->
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<header class="topbar">
+  <div class="brand card">
+    <div class="logo">REFLEX</div>
+    <div>
+      <h1>초파리 뇌로 배우는 펫</h1>
+      <p class="sub">가상 성향 유전과 학습 변화 · 연구 분야 시연</p>
+    </div>
+  </div>
+  <nav class="tabs card" id="tabs">
+    <button data-tab="train" class="on">훈련</button>
+    <button data-tab="breed">교배</button>
+    <button data-tab="compare">비교</button>
+  </nav>
+  <div class="policy card">
+    <span class="label">보상 정책 <em>팀 확정 전</em></span>
+    <div class="seg" id="policy">
+      <button data-p="reward_punish" class="on">보상 + 처벌</button>
+      <button data-p="reward_only">보상만</button>
+    </div>
+  </div>
+</header>
+
+<aside class="left">
+  <section class="card pet-card">
+    <div class="pet-head">
+      <div>
+        <div class="eyebrow" id="petGen">1세대 · 시조</div>
+        <h2 id="petName">-</h2>
+      </div>
+      <span class="chip" id="petOrigin">-</span>
+    </div>
+    <label class="look">모습 <select id="petLook"></select> <span class="muted">꾸미기 · 학습과 무관</span></label>
+    <div class="traits" id="petTraits"></div>
+    <div class="code"><span>성향 코드</span><code id="petCode">-</code></div>
+    <div class="from" id="petFrom"></div>
+  </section>
+
+  <section class="card state-card">
+    <div class="eyebrow">지금 상태</div>
+    <div class="prob"><span>A를 고를 확률</span><b id="pA">-</b></div>
+    <div class="bar"><i id="pABar"></i></div>
+    <div class="kv">
+      <div><span>정답 물건</span><b id="good">-</b></div>
+      <div><span>단계</span><b id="phase">-</b></div>
+      <div><span>시도</span><b id="trial">-</b></div>
+    </div>
+    <div class="progress"><div><i id="prog0"></i></div><div><i id="prog1"></i></div></div>
+    <div class="reach" id="reach"></div>
+  </section>
+</aside>
+
+<aside class="right">
+  <section class="card chart-card" id="chartCard">
+    <div class="eyebrow">실시간 학습 곡선</div>
+    <canvas id="chart" width="680" height="300"></canvas>
+    <div class="legend"><span class="l-p">━ 정답을 고를 확률</span><span class="l-ok">● 정답</span><span class="l-no">● 오답</span><span class="l-rev">┆ 규칙 변경</span></div>
+  </section>
+  <section class="card circuit-card">
+    <div class="eyebrow">초파리 회로 <span class="muted" id="circuitSrc"></span></div>
+    <div class="grid3">
+      <div><span>KC 반응 A</span><b id="kcA">-</b></div>
+      <div><span>KC 반응 B</span><b id="kcB">-</b></div>
+      <div><span>A·B 겹침</span><b id="ov">-</b></div>
+      <div><span>APL 억제량</span><b id="apl">-</b></div>
+      <div><span>억제 배율</span><b id="gapl">-</b></div>
+      <div><span>회복 속도</span><b id="decay">-</b></div>
+    </div>
+  </section>
+
+  <section class="card breed-card hidden" id="breedCard">
+    <div class="eyebrow">교배 · 성향 코드 조합</div>
+    <p class="hint">부모 두 마리를 고르세요. 성향마다 독립적으로 부모 한쪽의 값을 50% 확률로 받습니다. 배운 연결은 물려받지 않습니다.</p>
+    <div class="roster" id="roster"></div>
+    <div class="breed-actions">
+      <button class="primary" id="btnBreed" disabled>교배하기</button>
+      <span class="muted" id="breedSel">부모를 2마리 고르세요</span>
+    </div>
+    <div class="child" id="childBox"></div>
+  </section>
+
+  <section class="card compare-card hidden" id="compareCard">
+    <div class="eyebrow">네 조합 비교 (브라우저 시연 계산)</div>
+    <p class="hint">네 성향 조합 × seed 30개, 학습 끔 대조군 포함. 보고서 수치는 파이썬 엔진 결과를 씁니다.</p>
+    <button class="primary" id="btnCompare">비교 실행</button>
+    <div id="compareOut"></div>
+    <canvas id="cumChart" width="680" height="260" class="hidden"></canvas>
+    <div class="eyebrow mt">펫별 학습 곡선</div>
+    <canvas id="petChart" width="680" height="240"></canvas>
+    <div class="legend" id="petLegend"></div>
+  </section>
+</aside>
+
+<footer class="dock card" id="dock">
+  <button id="btnStep" title="한 번 고르기">▶ 한 번</button>
+  <button id="btnPhase" class="primary" title="이 단계의 남은 시도를 실행">⏩ 이 단계 끝까지</button>
+  <button id="btnReverse" title="첫 단계 40회를 마친 뒤에만 규칙을 바꿉니다">🔁 규칙 바꾸기</button>
+  <button id="btnReset" title="같은 펫을 학습 전 상태로">↺ 처음부터</button>
+  <div class="speed">
+    <span>속도</span>
+    <div class="seg" id="speed"><button data-s="1" class="on">1×</button><button data-s="3">3×</button><button data-s="0">즉시</button></div>
+  </div>
+  <label class="file" title="구매한 GLB 파일을 이 브라우저에서만 불러옵니다(저장·전송하지 않음)">
+    🐷 내 에셋(GLB) 불러오기<input type="file" id="glb" accept=".glb,.gltf">
+  </label>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<p class="disclaimer">
+  선택과 학습은 FlyWire v783 실제 연결(PN→KC, KC↔APL)로 계산합니다. 출력은 팀이 만든 접근·회피 두 출력이며, 이동·쓰다듬기 장면은 화면 표현입니다.
+  성향 유전은 팀이 정한 가상 규칙이고, 성향 값·판정 기준·보상 정책은 팀 확정 전 임시값입니다. 펫 모델은 팀이 만든 것이며 구매 에셋 원본을 포함하지 않습니다.
+</p>
+
+<!--DATA-->
+<!--APP-->
+</body>
+</html>

@@ -14,6 +14,7 @@ from pathlib import Path
 import build_html
 import command
 import engine
+import genetics
 
 HERE = Path(__file__).parent
 SEEDS = range(30)
@@ -33,8 +34,15 @@ for (const c of ["baseline", "learning_off", "apl_weak"]) for (const s of seeds)
     initial_secondary: r.initial_secondary, reversal_secondary: r.reversal_secondary, kc: r.kc_active, ov: r.overlap });
 }
 const parsed = sents.map((t) => L.validate(L.ruleParse(t))[0]);
+const G = L.Genetics, combos = [];
+for (const g of ["high", "low"]) for (const d of ["high", "low"]) for (const pol of ["reward_punish", "reward_only"]) for (let s = 0; s < 10; s++) {
+  const code = G.encode({ g_apl: g, decay: d }), dec = G.decode(code);
+  const r = L.runOne("baseline", s, { ...dec.settings, reward_policy: pol });
+  combos.push({ g, d, pol, s, hex: G.toHex(code), settings: dec.settings, choices: r.history.map((h) => h.choice).join(""),
+    initial: r.initial, reversal: r.reversal, outcomes: r.history.map((h) => h.outcome) });
+}
 const st = new L.Session("baseline", 0); for (let i = 0; i < 7; i++) st.step();
-process.stdout.write(JSON.stringify({ runs, parsed, state: st.state() }));
+process.stdout.write(JSON.stringify({ runs, parsed, state: st.state(), combos }));
 """
 
 
@@ -68,7 +76,16 @@ def main():
         s.step()
     smis = {k: (v, js["state"][k]) for k, v in s.state().items() if v != js["state"][k]}
     print(f"상태 표시: 불일치 항목 {smis if smis else '없음'}")
-    ok = not bad and worst < 1e-9 and not pmis and not smis
+    gbad = []
+    for c in js["combos"]:
+        code = genetics.encode({"g_apl": c["g"], "decay": c["d"]})
+        st = genetics.decode(code)[1]
+        p = engine.run_one("baseline", c["s"], **st, reward_policy=c["pol"])
+        if (genetics.to_hex(code) != c["hex"] or st != c["settings"] or "".join(h["choice"] for h in p["history"]) != c["choices"]
+                or p["initial"] != c["initial"] or p["reversal"] != c["reversal"] or [h["outcome"] for h in p["history"]] != c["outcomes"]):
+            gbad.append((c["g"], c["d"], c["pol"], c["s"]))
+    print(f"성향·보상 정책: 4조합 × 2정책 × seed 10개 중 불일치 {len(gbad)}개 {gbad[:3]}")
+    ok = not bad and worst < 1e-9 and not pmis and not smis and not gbad
     print("결과:", "일치" if ok else "불일치 있음")
     sys.exit(0 if ok else 1)
 

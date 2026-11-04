@@ -39,6 +39,7 @@
     constructor(condition = "baseline", seed = 0, overrides = {}) {
       this.condition = condition; this.seed = seed;
       this.p = { ...D.defaults, ...D.conditions[condition], ...overrides };
+      if (!["reward_punish", "reward_only"].includes(this.p.reward_policy)) throw new Error("보상 정책은 reward_punish 또는 reward_only");
       this.rng = makeRng(seed);
       this.kc = {}; this.apl = {}; this.apl_resid = {};
       for (const s of ["A", "B"]) [this.kc[s], this.apl[s], this.apl_resid[s]] = kcResponse(D.drive[s], this.p.g_apl, this.p.theta, this.p.gain);
@@ -65,7 +66,8 @@
     step(outcomeOverride = null) {
       const pA = this.p_choose_A(), vA = this.value("A"), vB = this.value("B");
       const choice = this.rng() < pA ? "A" : "B";
-      const outcome = outcomeOverride != null ? outcomeOverride : choice === this.good ? 1 : -1;
+      const wrong = this.p.reward_policy === "reward_punish" ? -1 : 0;
+      const outcome = outcomeOverride != null ? outcomeOverride : choice === this.good ? 1 : wrong;
       this.learn(choice, outcome);
       const wA = this.weight_summary("A"), wB = this.weight_summary("B");
       const rec = { trial: this.trial, phase: phaseName(this.reversals),
@@ -93,8 +95,8 @@
   function reachPrimary(seq, cp, ck) { let run = 0; for (let i = 0; i < seq.length; i++) { run = seq[i].p_correct >= cp ? run + 1 : 0; if (run >= ck) return i + 1; } return null; }
   function reachSecondary(seq, w, need) { const c = seq.map((r) => r.correct); for (let i = 0; i + w <= c.length; i++) if (c.slice(i, i + w).filter(Boolean).length >= need) return i + w; return null; }
 
-  function runOne(condition, seed) {
-    const s = new Session(condition, seed);
+  function runOne(condition, seed, overrides = {}) {
+    const s = new Session(condition, seed, overrides);
     for (let i = 0; i < s.p.initial_trials; i++) s.step();
     s.reverse();
     for (let i = 0; i < s.p.reversal_trials; i++) s.step();
@@ -233,5 +235,36 @@
     return { error: "unknown path" };
   }
 
-  window.ReflexLocal = { handle, Session, runOne, runBatch, ruleParse, validate, explain, describe };
+  // ---- 가상 성향 유전 (genetics.py를 옮김. 대응표는 D.traits에서 읽음) ----
+  const HIGH = 0xffff, LOW = 0x0000;
+  const slotGet = (code, slot) => Number((code >> BigInt(slot * 16)) & 0xffffn);
+  const slotSet = (code, slot, v) => (code & ~(0xffffn << BigInt(slot * 16))) | (BigInt(v & 0xffff) << BigInt(slot * 16));
+  const Genetics = {
+    traits: D.traits,
+    encode(levels) { let c = 0n; for (const [t, spec] of Object.entries(D.traits)) c = slotSet(c, spec.slot, levels[t] === "high" ? HIGH : LOW); return c; },
+    validate(code) {
+      if (code < 0n || code >= 1n << 256n) throw new Error("256비트 범위를 벗어남");
+      const used = new Set(Object.values(D.traits).map((s) => s.slot));
+      for (let s = 0; s < 16; s++) { const v = slotGet(code, s);
+        if (used.has(s) && v !== HIGH && v !== LOW) throw new Error(`${s}번 칸 값이 정해진 값이 아님`);
+        if (!used.has(s) && v !== 0) throw new Error(`사용하지 않는 ${s}번 칸이 0이 아님`); }
+      return code;
+    },
+    decode(code) {
+      Genetics.validate(code);
+      const levels = {}, settings = {}, labels = {};
+      for (const [t, spec] of Object.entries(D.traits)) { const v = slotGet(code, spec.slot), k = v === HIGH ? "0xffff" : "0x0000";
+        levels[t] = v === HIGH ? "high" : "low"; settings[t] = spec.values[k]; labels[t] = spec.labels[k]; }
+      return { levels, settings, labels };
+    },
+    toHex: (code) => code.toString(16).padStart(64, "0"),
+    fromHex: (h) => Genetics.validate(BigInt("0x" + h)),
+    // 성향마다 독립적으로 부모 한쪽의 칸을 50% 확률로 받는다 (교배 난수는 브라우저 난수라 파이썬과 같지 않음)
+    cross(a, b, rnd) { let c = 0n; const from = {};
+      for (const [t, spec] of Object.entries(D.traits)) { const p = rnd() < 0.5 ? a : b; c = slotSet(c, spec.slot, slotGet(p.code, spec.slot)); from[t] = p.id; }
+      return { code: Genetics.validate(c), from }; },
+    rng: (seed) => mulberry32(seed),
+  };
+
+  window.ReflexLocal = { handle, Session, runOne, runBatch, ruleParse, validate, explain, describe, Genetics };
 })();

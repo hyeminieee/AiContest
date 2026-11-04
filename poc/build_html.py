@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 import engine
+import genetics
 
 HERE = Path(__file__).parent
 STATIC = HERE / "static"
@@ -29,6 +30,8 @@ def export_data():
         "w_kc_apl": c["w_kc_apl"][show].tolist(), "w_apl_kc": c["w_apl_kc"][show].tolist(),
         "source": c["source"], "inputs": c["inputs"], "normalization": c["normalization"],
         "defaults": engine.DEFAULTS, "conditions": engine.CONDITIONS,
+        "traits": {t: {"slot": s["slot"], "values": {f"{k:#06x}": v for k, v in s["values"].items()},
+                       "labels": {f"{k:#06x}": v for k, v in s["labels"].items()}} for t, s in genetics.TRAITS.items()},
         "uniforms": {str(s): np.random.default_rng(10_000 + s).random(N_DRAWS).tolist() for s in range(N_SEEDS)},
     }
 
@@ -51,6 +54,40 @@ def build():
     return OUT
 
 
+PET3D = HERE / "pet3d"
+VENDOR = HERE / "vendor" / "three"
+OUT_PET = HERE / "REFLEX_Pet.html"
+
+
+def _module_url(text):
+    import base64
+    return "data:text/javascript;base64," + base64.b64encode(text.encode("utf-8")).decode("ascii")
+
+
+def build_pet3d():
+    """three.js 펫 화면(REFLEX_Pet.html). three.js는 import map의 data URL로 넣어 인터넷 없이 열린다."""
+    read = lambda p: p.read_text(encoding="utf-8")
+    gltf = read(VENDOR / "GLTFLoader.js").replace("'../utils/BufferGeometryUtils.js'", "'three/addons/utils/BufferGeometryUtils.js'")
+    imports = {"three": read(VENDOR / "three.module.min.js"),
+               "three/addons/utils/BufferGeometryUtils.js": read(VENDOR / "BufferGeometryUtils.js"),
+               "three/addons/loaders/GLTFLoader.js": gltf,
+               "three/addons/controls/OrbitControls.js": read(VENDOR / "OrbitControls.js")}
+    importmap = json.dumps({"imports": {k: _module_url(v) for k, v in imports.items()}})
+    scripts = [data_js(export_data()), read(STATIC / "local_engine.js")]
+    app = read(PET3D / "app.js")
+    assert all("</script" not in s for s in scripts + [app])
+    html = read(PET3D / "index.html")
+    nl = "\n"
+    for mark, rep in (("<!--CSS-->", f"<style>{nl}{read(PET3D / 'style.css')}{nl}</style>"),
+                      ("<!--IMPORTMAP-->", f'<script type="importmap">{importmap}</script>'),
+                      ("<!--DATA-->", nl.join(f"<script>{nl}{s}{nl}</script>" for s in scripts)),
+                      ("<!--APP-->", f'<script type="module">{nl}{app}{nl}</script>')):
+        assert html.count(mark) == 1, mark
+        html = html.replace(mark, rep)
+    OUT_PET.write_text(html, encoding="utf-8")
+    return OUT_PET
+
+
 if __name__ == "__main__":
-    p = build()
-    print(f"저장: {p} ({p.stat().st_size / 1024:.0f} KB) — 파일을 더블클릭해서 브라우저로 엽니다")
+    for p in (build(), build_pet3d()):
+        print(f"저장: {p} ({p.stat().st_size / 1024:.0f} KB) — 파일을 더블클릭해서 브라우저로 엽니다")
